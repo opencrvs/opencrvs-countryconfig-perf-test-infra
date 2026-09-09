@@ -1,0 +1,78 @@
+name: 0. Performance testing
+run-name: "Run performance test (${{ inputs.scenario }}) on ${{ inputs.environment }}"
+on:
+  workflow_call:
+    inputs:
+      scenario:
+        type: string
+      environment:
+        type: string
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Scenario to run"
+        required: true
+        default: "smoke"
+        type: choice
+        options:
+          - smoke
+          - load
+          - soak
+          - spike
+      environment:
+        description: "Target environment"
+        required: true
+        default: ""
+        type: choice
+        options:
+          - "perftest"
+
+env:
+  # Assuming chart version matches core image tag
+  ENV: ${{ inputs.environment }}
+jobs:
+  deploy:
+    environment: ${{ inputs.environment }}
+    name: perf-test on ${{ inputs.environment }}
+    # The soak scenario alone runs for 5h; give it headroom above GitHub's
+    # default 360m job timeout so a long-running test isn't cut off.
+    timeout-minutes: 420
+    runs-on:
+      - self-hosted
+      - k8s
+      - ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Deploy with Helm
+        id: deploy
+        run: |
+          touch environments/${ENV}/perf-test.yaml
+          helm upgrade --install perf-test oci://ghcr.io/opencrvs/perf-test \
+            -f environments/${ENV}/perf-test.yaml \
+            --timeout 15m \
+            --namespace "opencrvs-${ENV}" \
+            --set k6_script=${{ inputs.scenario }}
+      - name: Stream job logs
+        run: |
+          stern -n "opencrvs-${ENV}" \
+            -l "app.kubernetes.io/instance=perf-test,app.kubernetes.io/name=perf-test" \
+            --since 1s \
+            --tail 0 \
+            --exclude '"level":(30|info)' \
+            --template '{{.Message}}{{"\n"}}' &
+          STERN_PID=$!
+          JOB_NAME=$(kubectl -n "opencrvs-${ENV}" get jobs \
+            -l "app.kubernetes.io/instance=perf-test" \
+            --sort-by=.metadata.creationTimestamp \
+            -o jsonpath='{.items[-1].metadata.name}')
+          kubectl -n "opencrvs-${ENV}" wait --for=condition=complete --timeout=6h "job/${JOB_NAME}"
+          STATUS=$?
+          kill $STERN_PID 2>/dev/null || true
+          exit $STATUS
+      - name: Cleanup Helm Locks
+        if: failure() || cancelled()
+        run: |
+          kubectl -n "opencrvs-${ENV}" get secrets -l owner=helm -o json | \
+          jq -r '.items[] | select(.metadata.labels.status=="pending-install" or .metadata.labels.status=="pending-upgrade" or .metadata.labels.status=="pending-rollback") | .metadata.name' | \
+          xargs -r kubectl -n "opencrvs-${ENV}" delete secret || \
+          echo "No helm locks found, all is good"

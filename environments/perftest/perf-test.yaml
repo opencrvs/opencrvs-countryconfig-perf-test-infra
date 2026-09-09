@@ -1,0 +1,15 @@
+env:
+  K6_ELASTICSEARCH_URL: http://elasticsearch-0.elasticsearch.opencrvs-deps-perftest.svc.cluster.local:9200
+  K6_ELASTICSEARCH_USER: elastic
+
+
+k6_env_args:
+  GATEWAY_URL: "http://gateway:7070"
+  EVENTS_URL: "http://events:5555"
+
+k6_output: output-elasticsearch
+
+perf_test:
+  secrets:
+    elasticsearch-admin-user:
+      - ELASTIC_PASSWORD:K6_ELASTICSEARCH_PASSWORD

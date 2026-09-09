@@ -1,22 +1,12 @@
-name: 10. Performance testing
-run-name: "Run performance test action ${{ inputs.action }} on ${{ inputs.environment }} "
+name: 0. Generate performance data
+run-name: "Generate performance data on ${{ inputs.environment }}"
 on:
   workflow_call:
     inputs:
-      action:
-        type: string
       environment:
         type: string
   workflow_dispatch:
     inputs:
-      action:
-        description: "Action to perform"
-        required: true
-        default: "perf-test"
-        type: choice
-        options:
-          - perf-test
-          - data-generator
       environment:
         description: "Target environment"
         required: true
@@ -31,7 +21,8 @@ env:
 jobs:
   deploy:
     environment: ${{ inputs.environment }}
-    name: ${{ inputs.action }} on ${{ inputs.environment }}
+    name: data-generator on ${{ inputs.environment }}
+    timeout-minutes: 420
     runs-on:
       - self-hosted
       - k8s
@@ -41,17 +32,9 @@ jobs:
       - name: Deploy with Helm
         id: deploy
         run: |
-          stern -n "opencrvs-${ENV}" \
-            --since 1s \
-            --tail 0 \
-            --exclude 'kube-probe' \
-            --exclude '"level":(30|info)' \
-            --template '{{.PodName}}/{{.ContainerName}} | {{.Message}}{{"\n"}}' \
-            . &
-          STERN_PID=$!
-          touch environments/${ENV}/${{ inputs.action }}.yaml
-          helm upgrade --install ${{ inputs.action }} oci://ghcr.io/opencrvs/${{ inputs.action }} \
-            -f environments/${ENV}/${{ inputs.action }}.yaml \
+          touch environments/${ENV}/data-generator.yaml
+          helm upgrade --install data-generator oci://ghcr.io/opencrvs/data-generator \
+            -f environments/${ENV}/data-generator.yaml \
             --timeout 15m \
             --namespace "opencrvs-${ENV}" \
             --set postgres.user=${{ secrets.POSTGRES_USER }} \
@@ -60,6 +43,21 @@ jobs:
             --set env.count=${{ vars.GENERATE_DATA_COUNT_RECORDS }} \
             --set env.sleepMs=0 \
             --set env.batchSize=${{ vars.GENERATE_DATA_BATCH_SIZE }}
+      - name: Stream job logs
+        run: |
+          stern -n "opencrvs-${ENV}" \
+            -l "app.kubernetes.io/instance=data-generator,app.kubernetes.io/name=data-generator" \
+            --since 1s \
+            --tail 0 \
+            --exclude '"level":(30|info)' \
+            --template '{{.Message}}{{"\n"}}' &
+          STERN_PID=$!
+          JOB_NAME=$(kubectl -n "opencrvs-${ENV}" get jobs \
+            -l "app.kubernetes.io/instance=data-generator" \
+            --sort-by=.metadata.creationTimestamp \
+            -o jsonpath='{.items[-1].metadata.name}')
+          kubectl -n "opencrvs-${ENV}" wait --for=condition=complete --timeout=6h "job/${JOB_NAME}"
+          STATUS=$?
           kill $STERN_PID 2>/dev/null || true
           exit $STATUS
       - name: Cleanup Helm Locks
