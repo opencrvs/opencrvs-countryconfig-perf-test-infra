@@ -23,7 +23,7 @@ on:
         default: ""
         type: choice
         options:
-          - ""
+          - "perftest"
 
 env:
   # Assuming chart version matches core image tag
