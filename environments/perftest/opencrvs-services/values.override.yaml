@@ -5,3 +5,10 @@
 gateway:
   env:
     DISABLE_RATE_LIMIT: "true"
+
+
+ingress:
+  admin_console_allowlist:
+    - 49.12.218.32/32
+  application_allowlist: 
+    - 176.100.0.0/16
