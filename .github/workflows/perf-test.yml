@@ -65,10 +65,36 @@ jobs:
             -l "app.kubernetes.io/instance=perf-test" \
             --sort-by=.metadata.creationTimestamp \
             -o jsonpath='{.items[-1].metadata.name}')
-          kubectl -n "opencrvs-${ENV}" wait --for=condition=complete --timeout=6h "job/${JOB_NAME}"
-          STATUS=$?
+
+          # Race "complete" against "failed" so a failed job (backoffLimit: 0,
+          # so it fails fast) is reported immediately instead of only after the
+          # full 6h timeout elapses waiting for a "complete" that will never come.
+          OUTCOME_FILE=$(mktemp)
+          kubectl -n "opencrvs-${ENV}" wait --for=condition=complete --timeout=6h "job/${JOB_NAME}" \
+            && echo complete > "$OUTCOME_FILE" &
+          COMPLETE_PID=$!
+          kubectl -n "opencrvs-${ENV}" wait --for=condition=failed --timeout=6h "job/${JOB_NAME}" \
+            && echo failed > "$OUTCOME_FILE" &
+          FAILED_PID=$!
+
+          wait -n "$COMPLETE_PID" "$FAILED_PID"
+          if kill -0 "$COMPLETE_PID" 2>/dev/null; then
+            kill "$COMPLETE_PID" 2>/dev/null || true
+          else
+            kill "$FAILED_PID" 2>/dev/null || true
+          fi
+          wait "$COMPLETE_PID" "$FAILED_PID" 2>/dev/null
+
+          OUTCOME=$(cat "$OUTCOME_FILE" 2>/dev/null || echo unknown)
+          rm -f "$OUTCOME_FILE"
           kill $STERN_PID 2>/dev/null || true
-          exit $STATUS
+
+          if [ "$OUTCOME" = "complete" ]; then
+            exit 0
+          else
+            echo "Job ${JOB_NAME} did not complete successfully (outcome: ${OUTCOME})" >&2
+            exit 1
+          fi
       - name: Cleanup Helm Locks
         if: failure() || cancelled()
         run: |
