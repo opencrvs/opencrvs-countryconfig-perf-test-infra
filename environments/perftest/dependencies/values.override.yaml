@@ -7,6 +7,8 @@ utilities:
   image:
     tag: v2.1.0-beta
 
-ingress:
-  admin_console_allowlist:
-    - 49.12.218.32/32
+network_policies:
+  ingress_mode: deny
+  egress_mode: deny
+  allowed_namespaces:
+    - opencrvs-perftest
