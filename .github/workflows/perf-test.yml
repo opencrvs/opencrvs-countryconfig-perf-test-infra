@@ -7,6 +7,8 @@ on:
         type: string
       environment:
         type: string
+      perf_test_branch:
+        type: string
   workflow_dispatch:
     inputs:
       scenario:
@@ -26,6 +28,11 @@ on:
         type: choice
         options:
           - "perftest"
+      perf_test_branch:
+        description: "Branch of opencrvs/performance-test to run. Leave empty to use the image the chart defaults to."
+        required: false
+        default: ""
+        type: string
 
 env:
   # Assuming chart version matches core image tag
@@ -43,6 +50,30 @@ jobs:
       - ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v6
+      # The k6 code reaches the cluster as a container image, not as a checkout.
+      # Every push to performance-test publishes `<short sha>` and moves `latest`,
+      # so pinning the tag is the only way to run a specific branch's test code.
+      - name: Resolve performance-test image
+        id: perf_test_image
+        env:
+          PERF_TEST_BRANCH: ${{ inputs.perf_test_branch }}
+        run: |
+          if [[ -z "$PERF_TEST_BRANCH" ]]; then
+            echo "No branch given; using the image tag the chart defaults to."
+            echo "helm_args=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SHA=$(git ls-remote https://github.com/opencrvs/performance-test \
+            "refs/heads/$PERF_TEST_BRANCH" | cut -f1)
+
+          if [[ -z "$SHA" ]]; then
+            echo "::error::Branch '$PERF_TEST_BRANCH' not found in opencrvs/performance-test"
+            exit 1
+          fi
+
+          echo "Running $PERF_TEST_BRANCH at ${SHA:0:7}"
+          echo "helm_args=--set image.tag=${SHA:0:7}" >> "$GITHUB_OUTPUT"
       - name: Deploy with Helm
         id: deploy
         run: |
@@ -51,7 +82,8 @@ jobs:
             -f environments/${ENV}/perf-test.yaml \
             --timeout 15m \
             --namespace "opencrvs-${ENV}" \
-            --set k6_script=${{ inputs.scenario }}
+            --set k6_script=${{ inputs.scenario }} \
+            ${{ steps.perf_test_image.outputs.helm_args }}
       - name: Stream job logs
         run: |
           stern -n "opencrvs-${ENV}" \

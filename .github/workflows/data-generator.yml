@@ -1,19 +1,33 @@
 name: 0. Generate performance data
-run-name: "Generate performance data on ${{ inputs.environment }}"
+run-name: 'Generate performance data on ${{ inputs.environment }} (count: ${{ inputs.count || vars.GENERATE_DATA_COUNT_RECORDS }})'
 on:
   workflow_call:
     inputs:
       environment:
         type: string
+      count:
+        type: string
+      batchSize:
+        type: string
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target environment"
+        description: 'Target environment'
         required: true
-        default: ""
+        default: ''
         type: choice
         options:
-          - "perftest"
+          - 'perftest'
+      count:
+        description: 'Events to generate (blank = environment default)'
+        required: false
+        default: ''
+        type: string
+      batchSize:
+        description: 'Events per transaction (blank = environment default)'
+        required: false
+        default: ''
+        type: string
 
 env:
   # Assuming chart version matches core image tag
@@ -40,9 +54,9 @@ jobs:
             --set postgres.user=${{ secrets.POSTGRES_USER }} \
             --set postgres.password=${{ secrets.POSTGRES_PASSWORD }} \
             --set postgres.host=postgres-0.postgres.opencrvs-deps-${ENV}.svc.cluster.local \
-            --set env.count=${{ vars.GENERATE_DATA_COUNT_RECORDS }} \
+            --set env.count=${{ inputs.count || vars.GENERATE_DATA_COUNT_RECORDS }} \
             --set env.sleepMs=0 \
-            --set env.batchSize=${{ vars.GENERATE_DATA_BATCH_SIZE }}
+            --set env.batchSize=${{ inputs.batchSize || vars.GENERATE_DATA_BATCH_SIZE }}
       - name: Stream job logs
         run: |
           stern -n "opencrvs-${ENV}" \
