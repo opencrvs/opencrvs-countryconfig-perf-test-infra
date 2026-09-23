@@ -153,21 +153,21 @@ jobs:
           fi
 
           echo "Checking whether the k6-metrics rollover alias already exists..."
-          ALIAS_STATUS=$(kubectl exec -i -n "$NAMESPACE" elasticsearch-0 -- curl -s -o /dev/null -w '%{http_code}' \
+          ALIAS_STATUS=$(kubectl exec -n "$NAMESPACE" elasticsearch-0 -- curl -s -o /dev/null -w '%{http_code}' \
             -u "elastic:${ELASTIC_PASSWORD}" "localhost:9200/_alias/k6-metrics")
           if [ "$ALIAS_STATUS" == "200" ]; then
             echo "k6-metrics is already a rollover alias, nothing to bootstrap."
           else
-            INDEX_STATUS=$(kubectl exec -i -n "$NAMESPACE" elasticsearch-0 -- curl -s -o /dev/null -w '%{http_code}' \
+            INDEX_STATUS=$(kubectl exec -n "$NAMESPACE" elasticsearch-0 -- curl -s -o /dev/null -w '%{http_code}' \
               -u "elastic:${ELASTIC_PASSWORD}" -X HEAD "localhost:9200/k6-metrics")
             if [ "$INDEX_STATUS" == "200" ]; then
               # Plain index collides with the alias name; dropped rather than migrated (disposable load-test data).
               echo "k6-metrics exists as a plain index; deleting it so the alias can take its name"
-              kubectl exec -i -n "$NAMESPACE" elasticsearch-0 -- curl -s -u "elastic:${ELASTIC_PASSWORD}" \
+              kubectl exec -n "$NAMESPACE" elasticsearch-0 -- curl -s -u "elastic:${ELASTIC_PASSWORD}" \
                 -X DELETE "localhost:9200/k6-metrics" > /dev/null
             fi
             echo "Bootstrapping k6-metrics-000001 as the write index behind the k6-metrics alias..."
-            status=$(kubectl exec -i -n "$NAMESPACE" elasticsearch-0 -- curl -s -o /dev/null -w '%{http_code}' \
+            status=$(kubectl exec -n "$NAMESPACE" elasticsearch-0 -- curl -s -o /dev/null -w '%{http_code}' \
               -u "elastic:${ELASTIC_PASSWORD}" \
               -X PUT "localhost:9200/k6-metrics-000001" \
               -H 'Content-Type: application/json' \
