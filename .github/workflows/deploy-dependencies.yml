@@ -10,6 +10,11 @@ on:
         type: choice
         options:
           - perftest
+      core-branch:
+        description: "opencrvs-core branch to deploy the dependencies chart from. Leave empty to use the published chart"
+        required: false
+        default: ""
+        type: string
 env:
   DEPENDENCIES_CHART_VERSION: "v2.1.0"
   TRAEFIK_CHART_VERSION: "41.0.2"
@@ -55,6 +60,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+      - name: Checkout dependencies chart from core
+        if: ${{ inputs.core-branch != '' }}
+        uses: actions/checkout@v6
+        with:
+          repository: opencrvs/opencrvs-core
+          ref: ${{ inputs.core-branch }}
+          path: core
       - name: Install Traefik
         run: |
           touch environments/${ENV}/traefik/values.override.yaml
@@ -81,7 +93,14 @@ jobs:
       # See: https://github.com/opencrvs/opencrvs-core/pull/13502
       - name: Install OpenCRVS dependencies
         id: deploy
+        env:
+          CORE_BRANCH: ${{ inputs.core-branch }}
         run: |
+          CHART="oci://ghcr.io/opencrvs/opencrvs-dependencies-chart:${DEPENDENCIES_CHART_VERSION}"
+          if [ -n "${CORE_BRANCH}" ]; then
+            CHART="./core/charts/dependencies"
+          fi
+          echo "Deploying dependencies chart from ${CHART}"
           stern -n "opencrvs-deps-${ENV}" \
             --since 1s \
             --tail 0 \
@@ -91,7 +110,7 @@ jobs:
             . &
           STERN_PID=$!
           touch environments/${ENV}/dependencies/values.override.yaml
-          helm upgrade --install opencrvs-deps oci://ghcr.io/opencrvs/opencrvs-dependencies-chart:${DEPENDENCIES_CHART_VERSION} \
+          helm upgrade --install opencrvs-deps "${CHART}" \
             --namespace "opencrvs-deps-${ENV}" \
             -f environments/${ENV}/dependencies/values.yaml \
             -f environments/${ENV}/dependencies/values.override.yaml \
