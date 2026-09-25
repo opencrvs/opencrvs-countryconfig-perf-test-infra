@@ -6,6 +6,8 @@ env:
 k6_env_args:
   GATEWAY_URL: "http://gateway:7070"
   EVENTS_URL: "http://events:5555"
+  # Spike test warm-up and recovery load; it peaks at 5x this.
+  BASELINE_VUS: "50"
 
 k6_output: output-elasticsearch
 
