@@ -1,0 +1,47 @@
+name: 11. Deploy & run performance test
+run-name: "Perf test by ${{ github.event.client_payload.actor || github.actor }} (core: ${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }})"
+on:
+  repository_dispatch:
+    types: [run_perf_test]
+  workflow_dispatch:
+    inputs:
+      core-image-tag:
+        description: Core image tag
+        default: "develop"
+        required: true
+concurrency:
+  group: "perf-test"
+  cancel-in-progress: false
+jobs:
+  reset-data:
+    uses: ./.github/workflows/clear-all-data.yml
+    with:
+      environment: "perftest"
+    secrets: inherit
+  data-seed:
+    needs: reset-data
+    uses: ./.github/workflows/seed-data.yml
+    with:
+      environment: "perftest"
+    secrets: inherit
+  deploy:
+    needs: data-seed
+    uses: ./.github/workflows/deploy-opencrvs.yml
+    with:
+      core-image-tag: ${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }}
+      environment: "perftest"
+      data-seed-enabled: false
+    secrets: inherit
+  generate-data:
+    needs: deploy
+    uses: ./.github/workflows/data-generator.yml
+    with:
+      environment: "perftest"
+    secrets: inherit
+  perf-test:
+    needs: generate-data
+    uses: ./.github/workflows/perf-test.yml
+    with:
+      environment: "perftest"
+      scenario: load
+    secrets: inherit
