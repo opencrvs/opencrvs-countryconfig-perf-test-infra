@@ -14,3 +14,11 @@ network_policy:
 
 elasticsearch:
   reindex_enabled: false
+
+countryconfig:
+  env:
+    OPENID_PROVIDER_CLAIMS: name,family_name,given_name,middle_name,birthdate,address
+    OPENID_PROVIDER_CLIENT_ID: mock-client_id
+    # mock data. Currently tennis club is used for perf testing.
+    ESIGNET_REDIRECT_URL: http://esignet-mock:20260/authorize
+    MOSIP_API_USERINFO_URL: http://mosip-api:2024/esignet/get-oidp-user-info
