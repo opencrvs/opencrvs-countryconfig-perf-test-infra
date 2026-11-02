@@ -18,19 +18,13 @@ jobs:
     with:
       environment: "perftest"
     secrets: inherit
-  data-seed:
-    needs: reset-data
-    uses: ./.github/workflows/seed-data.yml
-    with:
-      environment: "perftest"
-    secrets: inherit
   deploy:
-    needs: data-seed
+    needs: reset-data
     uses: ./.github/workflows/deploy-opencrvs.yml
     with:
       core-image-tag: ${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }}
       environment: "perftest"
-      data-seed-enabled: false
+      data-seed-enabled: true
     secrets: inherit
   generate-data:
     needs: deploy
