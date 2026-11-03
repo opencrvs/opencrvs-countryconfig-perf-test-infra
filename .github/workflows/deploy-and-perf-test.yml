@@ -24,10 +24,16 @@ jobs:
     with:
       core-image-tag: ${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }}
       environment: "perftest"
-      data-seed-enabled: true
+      data-seed-enabled: false
+    secrets: inherit
+  data-seed:
+    needs: deploy
+    uses: ./.github/workflows/seed-data.yml
+    with:
+      environment: "perftest"
     secrets: inherit
   generate-data:
-    needs: deploy
+    needs: data-seed
     uses: ./.github/workflows/data-generator.yml
     with:
       environment: "perftest"
