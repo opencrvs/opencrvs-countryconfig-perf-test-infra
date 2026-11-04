@@ -18,16 +18,48 @@ jobs:
     with:
       environment: "perftest"
     secrets: inherit
+  build-countryconfig:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: perf-seed
+          push: true
+          build-args: CORE_IMAGE_TAG=${{ env.TAG }}
+          tags: ghcr.io/opencrvs/ocrvs-testland-perf:${{ env.TAG }}
+      - name: Reuse testland assets image
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/opencrvs/ocrvs-testland-perf:${TAG}-assets \
+            ghcr.io/opencrvs/ocrvs-testland:${TAG}-assets
   deploy:
-    needs: reset-data
+    needs: [reset-data, build-countryconfig]
     uses: ./.github/workflows/deploy-opencrvs.yml
     with:
       core-image-tag: ${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }}
       environment: "perftest"
-      data-seed-enabled: true
+      data-seed-enabled: false
+    secrets: inherit
+  data-seed:
+    needs: deploy
+    uses: ./.github/workflows/seed-data.yml
+    with:
+      environment: "perftest"
     secrets: inherit
   generate-data:
-    needs: deploy
+    needs: data-seed
     uses: ./.github/workflows/data-generator.yml
     with:
       environment: "perftest"
