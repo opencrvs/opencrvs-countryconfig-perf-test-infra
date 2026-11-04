@@ -32,8 +32,9 @@ on:
       core-image-tag:
         type: string
 env:
-   # Prior releases have corresponding chart. Develop uses the "currently" developed minor.
-  OPENCRVS_CHART_VERSION: ${{ startsWith(inputs.core-image-tag, 'v') && inputs.core-image-tag || 'v2.2.0' }}
+  # Prior releases have corresponding chart. Develop uses the "currently" developed minor.
+  # OPENCRVS_CHART_VERSION: ${{ startsWith(inputs.core-image-tag, 'v') && inputs.core-image-tag || 'v2.2.0' }}
+  OPENCRVS_CHART_VERSION: "v2.1.0"
 jobs:
   validate:
     name: "Validate ${{ inputs.stage }}"
