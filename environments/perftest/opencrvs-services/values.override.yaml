@@ -14,3 +14,14 @@ network_policy:
 
 elasticsearch:
   reindex_enabled: false
+
+s3:
+  auth_mode: use_secret
+  host: minio-0.minio.opencrvs-deps-perftest.svc.cluster.local
+
+countryconfig:
+  env:
+    OPENID_PROVIDER_CLAIMS: name,family_name,given_name,middle_name,birthdate,address
+    OPENID_PROVIDER_CLIENT_ID: mock-client_id
+    ESIGNET_REDIRECT_URL: http://esignet-mock:20260/authorize
+    MOSIP_API_USERINFO_URL: http://mosip-api:2024/esignet/get-oidp-user-info

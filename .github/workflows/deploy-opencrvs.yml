@@ -97,7 +97,7 @@ jobs:
       - name: Use core-testland as countryconfig fallback
         if: ${{ !inputs.countryconfig-image-tag }}
         run: |
-          echo "COUNTRYCONFIG_IMAGE_NAME=ocrvs-testland" >> "$GITHUB_ENV"
+          echo "COUNTRYCONFIG_IMAGE_NAME=ghcr.io/opencrvs/ocrvs-testland-perf" >> "$GITHUB_ENV"
           echo "COUNTRYCONFIG_IMAGE_TAG=$CORE_IMAGE_TAG" >> "$GITHUB_ENV"
       - name: Generate summary
         env:
@@ -210,4 +210,3 @@ jobs:
       core-image-tag: ${{ inputs.core-image-tag }}
       stage: postdeploy
     secrets: inherit
-
