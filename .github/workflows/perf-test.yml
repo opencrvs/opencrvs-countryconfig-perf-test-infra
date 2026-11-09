@@ -66,33 +66,28 @@ jobs:
             --sort-by=.metadata.creationTimestamp \
             -o jsonpath='{.items[-1].metadata.name}')
 
-          # Race "complete" against "failed" so a failed job (backoffLimit: 0,
-          # so it fails fast) is reported immediately instead of only after the
-          # full 6h timeout elapses waiting for a "complete" that will never come.
-          OUTCOME_FILE=$(mktemp)
+          # Start two background checks. One waits for the job to complete.
+          # The other waits for the job to fail. Each check writes its result to a file. ($? = exit status of last command)
+          RESULT_FILE=$(mktemp)
           kubectl -n "opencrvs-${ENV}" wait --for=condition=complete --timeout=6h "job/${JOB_NAME}" \
-            && echo complete > "$OUTCOME_FILE" &
-          COMPLETE_PID=$!
+            && echo complete > "$RESULT_FILE" &
+          WAIT_FOR_COMPLETE=$!
           kubectl -n "opencrvs-${ENV}" wait --for=condition=failed --timeout=6h "job/${JOB_NAME}" \
-            && echo failed > "$OUTCOME_FILE" &
-          FAILED_PID=$!
+            && echo failed > "$RESULT_FILE" &
+          WAIT_FOR_FAILED=$!
 
-          wait -n "$COMPLETE_PID" "$FAILED_PID"
-          if kill -0 "$COMPLETE_PID" 2>/dev/null; then
-            kill "$COMPLETE_PID" 2>/dev/null || true
-          else
-            kill "$FAILED_PID" 2>/dev/null || true
-          fi
-          wait "$COMPLETE_PID" "$FAILED_PID" 2>/dev/null
-
-          OUTCOME=$(cat "$OUTCOME_FILE" 2>/dev/null || echo unknown)
-          rm -f "$OUTCOME_FILE"
+          # Wait until one check finishes. Then stop both checks.
+          # Perf tests are time based. Intentionally stopped check exits with 143. "|| true" keeps that from failing the step.
+          wait -n "$WAIT_FOR_COMPLETE" "$WAIT_FOR_FAILED" || true
+          kill "$WAIT_FOR_COMPLETE" "$WAIT_FOR_FAILED" 2>/dev/null || true
+          wait "$WAIT_FOR_COMPLETE" "$WAIT_FOR_FAILED" 2>/dev/null || true
           kill $STERN_PID 2>/dev/null || true
 
-          if [ "$OUTCOME" = "complete" ]; then
-            exit 0
-          else
-            echo "Job ${JOB_NAME} did not complete successfully (outcome: ${OUTCOME})" >&2
+          RESULT=$(cat "$RESULT_FILE")
+          rm -f "$RESULT_FILE"
+
+          if [ "$RESULT" != "complete" ]; then
+            echo "Job ${JOB_NAME} did not complete (result: ${RESULT:-none})" >&2
             exit 1
           fi
       - name: Cleanup Helm Locks
