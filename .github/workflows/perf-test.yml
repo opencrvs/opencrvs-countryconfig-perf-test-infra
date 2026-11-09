@@ -7,6 +7,9 @@ on:
         type: string
       environment:
         type: string
+    outputs:
+      summary:
+        value: ${{ jobs.deploy.outputs.summary }}
   workflow_dispatch:
     inputs:
       scenario:
@@ -37,6 +40,8 @@ jobs:
     # The soak scenario alone runs for 5h; give it headroom above GitHub's
     # default 360m job timeout so a long-running test isn't cut off.
     timeout-minutes: 420
+    outputs:
+      summary: ${{ steps.summary.outputs.text }}
     runs-on:
       - self-hosted
       - k8s
@@ -65,6 +70,7 @@ jobs:
             -l "app.kubernetes.io/instance=perf-test" \
             --sort-by=.metadata.creationTimestamp \
             -o jsonpath='{.items[-1].metadata.name}')
+          echo "JOB_NAME=${JOB_NAME}" >> "$GITHUB_ENV"
 
           # Start two background checks. One waits for the job to complete.
           # The other waits for the job to fail. Each check writes its result to a file. ($? = exit status of last command)
@@ -90,6 +96,16 @@ jobs:
             echo "Job ${JOB_NAME} did not complete (result: ${RESULT:-none})" >&2
             exit 1
           fi
+      - name: Collect k6 summary
+        id: summary
+        if: always()
+        run: |
+          {
+            echo 'text<<EOF'
+            kubectl -n "opencrvs-${ENV}" logs "job/${JOB_NAME}" \
+              | grep -o '{"slack_summary".*}' | tail -1 | jq -r .slack_summary || true
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
       - name: Cleanup Helm Locks
         if: failure() || cancelled()
         run: |

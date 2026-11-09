@@ -71,3 +71,16 @@ jobs:
       environment: "perftest"
       scenario: load
     secrets: inherit
+  notify:
+    needs: perf-test
+    if: always()
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: ${{ vars.SLACK_PERF_TEST_CHANNEL }}
+          slack-message: |
+            ${{ needs.perf-test.result == 'success' && '✅' || '❌' }} Performance test: ${{ needs.perf-test.result }} (core: `${{ github.event.client_payload.core-image-tag || inputs.core-image-tag }}`) · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>
+            ```${{ needs.perf-test.outputs.summary || 'No k6 summary' }}```
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
